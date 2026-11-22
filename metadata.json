@@ -1,0 +1,6 @@
+{
+  "name": "OptikLab",
+  "description": "Estúdio generativo de shaders ópticos, distorção líquida, halftone e tipografia experimental com Google Fonts e exportação em alta resolução.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
