@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { HalftoneShape, StudioParams } from '../types/studio';
+import { Plus, Trash2 } from 'lucide-react';
+import { BlurZone, HalftoneShape, StudioParams } from '../types/studio';
 import { ColorField, ModuleToggleHeader, SliderControl } from './ui/StudioControls';
 
 interface RightPanelProps {
@@ -13,7 +14,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ params, onChange }) => {
   const [expanded, setExpanded] = useState<Record<ModuleKey, boolean>>({
     warp: true,
     streaks: true,
-    defocus: false,
+    defocus: true,
     halftone: false,
     grade: true,
   });
@@ -189,47 +190,293 @@ export const RightPanel: React.FC<RightPanelProps> = ({ params, onChange }) => {
             }}
           />
           {expanded.defocus && (
-            <div className="px-4 pb-4 space-y-3">
+            <div className="px-4 pb-4 space-y-3.5">
               <SliderControl
-                label="Desfoque Óptico"
+                label="% de Uso do Efeito"
+                value={params.defocus.mix}
+                min={0}
+                max={1.0}
+                step={0.01}
+                formatValue={(v) => `${Math.round(v * 100)}%`}
+                onChange={(v) =>
+                  onChange((p) => ({ ...p, defocus: { ...p.defocus, mix: v } }))
+                }
+              />
+              <SliderControl
+                label="Intensidade do Desfoque"
                 value={params.defocus.blurAmount}
                 min={0}
                 max={1.0}
                 step={0.01}
+                formatValue={(v) => `${Math.round(v * 100)}%`}
                 onChange={(v) =>
                   onChange((p) => ({ ...p, defocus: { ...p.defocus, blurAmount: v } }))
                 }
               />
-              <SliderControl
-                label="Plano Focal (Tilt-Shift)"
-                value={params.defocus.tiltShift}
-                min={0}
-                max={1.0}
-                step={0.01}
-                onChange={(v) =>
-                  onChange((p) => ({ ...p, defocus: { ...p.defocus, tiltShift: v } }))
-                }
-              />
-              <SliderControl
-                label="Fusão de Tinta (Ink Melt)"
-                value={params.defocus.inkMelt}
-                min={0}
-                max={1.0}
-                step={0.01}
-                onChange={(v) =>
-                  onChange((p) => ({ ...p, defocus: { ...p.defocus, inkMelt: v } }))
-                }
-              />
-              <SliderControl
-                label="Limiar Metaball"
-                value={params.defocus.meltThreshold}
-                min={0}
-                max={1.0}
-                step={0.01}
-                onChange={(v) =>
-                  onChange((p) => ({ ...p, defocus: { ...p.defocus, meltThreshold: v } }))
-                }
-              />
+
+              {/* Zone Mode Selector */}
+              <div className="space-y-1.5">
+                <span className="text-xs font-medium text-zinc-300">Onde Aplicar</span>
+                <div className="grid grid-cols-2 gap-1 p-1 bg-zinc-900 rounded-md border border-zinc-800/80">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChange((p) => ({
+                        ...p,
+                        defocus: { ...p.defocus, zoneMode: 'full' },
+                      }))
+                    }
+                    className={`py-1 px-2 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                      params.defocus.zoneMode === 'full'
+                        ? 'bg-zinc-800 text-white'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    Tela Inteira
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChange((p) => ({
+                        ...p,
+                        defocus: { ...p.defocus, zoneMode: 'zones' },
+                      }))
+                    }
+                    className={`py-1 px-2 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                      params.defocus.zoneMode === 'zones'
+                        ? 'bg-zinc-800 text-white'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    Zonas de Desfoque
+                  </button>
+                </div>
+              </div>
+
+              {params.defocus.zoneMode === 'zones' && (
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] text-zinc-400">Comportamento das Zonas</span>
+                    <div className="grid grid-cols-2 gap-1 p-1 bg-zinc-900 rounded-md border border-zinc-800/80">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onChange((p) => ({
+                            ...p,
+                            defocus: { ...p.defocus, invertZones: false },
+                          }))
+                        }
+                        className={`py-1 px-2 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                          !params.defocus.invertZones
+                            ? 'bg-zinc-800 text-white'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        Desfocar Zonas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onChange((p) => ({
+                            ...p,
+                            defocus: { ...p.defocus, invertZones: true },
+                          }))
+                        }
+                        className={`py-1 px-2 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                          params.defocus.invertZones
+                            ? 'bg-zinc-800 text-white'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        Nítido nas Zonas
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Zones List */}
+                  <div className="space-y-2.5 divide-y divide-zinc-800/70">
+                    {params.defocus.zones.map((zone, idx) => {
+                      const updateZone = (patch: Partial<BlurZone>) => {
+                        onChange((p) => ({
+                          ...p,
+                          defocus: {
+                            ...p.defocus,
+                            zones: p.defocus.zones.map((z) =>
+                              z.id === zone.id ? { ...z, ...patch } : z
+                            ),
+                          },
+                        }));
+                      };
+                      return (
+                        <div key={zone.id} className={idx > 0 ? 'pt-3 space-y-2.5' : 'space-y-2.5'}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-semibold text-zinc-200 font-mono-tabular">
+                              Zona {idx + 1}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <div className="flex bg-zinc-900 border border-zinc-800 rounded p-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => updateZone({ type: 'radial' })}
+                                  className={`px-1.5 py-0.5 text-[10px] rounded cursor-pointer ${
+                                    zone.type === 'radial'
+                                      ? 'bg-zinc-700 text-white'
+                                      : 'text-zinc-400 hover:text-zinc-200'
+                                  }`}
+                                >
+                                  Radial
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateZone({ type: 'linear' })}
+                                  className={`px-1.5 py-0.5 text-[10px] rounded cursor-pointer ${
+                                    zone.type === 'linear'
+                                      ? 'bg-zinc-700 text-white'
+                                      : 'text-zinc-400 hover:text-zinc-200'
+                                  }`}
+                                >
+                                  Faixa
+                                </button>
+                              </div>
+                              {params.defocus.zones.length > 1 && (
+                                <button
+                                  type="button"
+                                  aria-label={`Remover Zona ${idx + 1}`}
+                                  onClick={() =>
+                                    onChange((p) => ({
+                                      ...p,
+                                      defocus: {
+                                        ...p.defocus,
+                                        zones: p.defocus.zones.filter((z) => z.id !== zone.id),
+                                      },
+                                    }))
+                                  }
+                                  className="text-zinc-500 hover:text-red-400 p-0.5 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <SliderControl
+                            label="% na Zona"
+                            value={zone.intensity}
+                            min={0}
+                            max={1.0}
+                            step={0.01}
+                            formatValue={(v) => `${Math.round(v * 100)}%`}
+                            onChange={(v) => updateZone({ intensity: v })}
+                          />
+                          <div className="grid grid-cols-2 gap-2.5">
+                            <SliderControl
+                              label="Posição X"
+                              value={zone.x}
+                              min={0.0}
+                              max={1.0}
+                              step={0.01}
+                              formatValue={(v) => `${Math.round(v * 100)}%`}
+                              onChange={(v) => updateZone({ x: v })}
+                            />
+                            <SliderControl
+                              label="Posição Y"
+                              value={zone.y}
+                              min={0.0}
+                              max={1.0}
+                              step={0.01}
+                              formatValue={(v) => `${Math.round(v * 100)}%`}
+                              onChange={(v) => updateZone({ y: v })}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2.5">
+                            <SliderControl
+                              label="Tamanho / Raio"
+                              value={zone.radius}
+                              min={0.05}
+                              max={0.85}
+                              step={0.01}
+                              onChange={(v) => updateZone({ radius: v })}
+                            />
+                            <SliderControl
+                              label="Suavidade"
+                              value={zone.softness}
+                              min={0.05}
+                              max={1.0}
+                              step={0.01}
+                              onChange={(v) => updateZone({ softness: v })}
+                            />
+                          </div>
+                          {zone.type === 'linear' && (
+                            <SliderControl
+                              label="Ângulo da Faixa"
+                              value={zone.angle}
+                              min={0}
+                              max={360}
+                              step={1}
+                              unit="°"
+                              onChange={(v) => updateZone({ angle: v })}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {params.defocus.zones.length < 4 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onChange((p) => ({
+                          ...p,
+                          defocus: {
+                            ...p.defocus,
+                            zones: [
+                              ...p.defocus.zones,
+                              {
+                                id: `z-${Date.now().toString(36)}`,
+                                type: 'radial',
+                                x: 0.55,
+                                y: 0.45,
+                                radius: 0.24,
+                                softness: 0.5,
+                                intensity: 0.85,
+                                angle: 45,
+                              },
+                            ],
+                          },
+                        }))
+                      }
+                      className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-medium text-zinc-200 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-md transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Adicionar Zona de Desfoque ({params.defocus.zones.length}/4)</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-zinc-800/70 space-y-3">
+                <SliderControl
+                  label="Fusão de Tinta (Ink Melt)"
+                  value={params.defocus.inkMelt}
+                  min={0}
+                  max={1.0}
+                  step={0.01}
+                  onChange={(v) =>
+                    onChange((p) => ({ ...p, defocus: { ...p.defocus, inkMelt: v } }))
+                  }
+                />
+                <SliderControl
+                  label="Limiar Metaball"
+                  value={params.defocus.meltThreshold}
+                  min={0}
+                  max={1.0}
+                  step={0.01}
+                  onChange={(v) =>
+                    onChange((p) => ({ ...p, defocus: { ...p.defocus, meltThreshold: v } }))
+                  }
+                />
+              </div>
             </div>
           )}
         </div>

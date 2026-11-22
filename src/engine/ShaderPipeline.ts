@@ -10,58 +10,98 @@ void main() {
 }
 `;
 
-// Pass 1: Separable Gaussian Blur + Tilt-Shift + Ink-Melt Metaball Threshold
+// Pass 1: Separable Gaussian Blur + Multi-Zone Optical Focus + Ink-Melt Metaball Threshold
 const BLUR_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_uv;
 out vec4 outColor;
 
 uniform sampler2D u_tex;
+uniform sampler2D u_sharpTex;
 uniform vec2 u_resolution;
 uniform vec2 u_dir;
 uniform float u_blurPx;
-uniform float u_tiltShift;
+uniform float u_defocusMix;
 uniform float u_meltThreshold;
 uniform int u_isSecondPass;
 
+uniform int u_zoneMode; // 0 = full, 1 = zones
+uniform int u_invertZones; // 0 = blur inside zones, 1 = sharp inside zones
+uniform int u_zoneCount;
+uniform vec2 u_zonePos[4];
+uniform float u_zoneRadius[4];
+uniform float u_zoneSoftness[4];
+uniform float u_zoneIntensity[4];
+uniform int u_zoneType[4]; // 0 = radial, 1 = linear
+uniform float u_zoneAngle[4];
+
+float computeZoneBlurFactor(vec2 uv) {
+  if (u_zoneMode == 0 || u_zoneCount <= 0) {
+    return 1.0;
+  }
+
+  float aspect = u_resolution.x / max(1.0, u_resolution.y);
+  float zoneWeight = 0.0;
+
+  for (int i = 0; i < 4; i++) {
+    if (i >= u_zoneCount) break;
+    vec2 d = vec2((uv.x - u_zonePos[i].x) * aspect, uv.y - u_zonePos[i].y);
+    float dist = 0.0;
+    if (u_zoneType[i] == 0) {
+      dist = length(d);
+    } else {
+      float rad = radians(u_zoneAngle[i]);
+      dist = abs(dot(d, vec2(-sin(rad), cos(rad))));
+    }
+    float falloff = max(0.025, u_zoneSoftness[i] * 0.55);
+    float inner = max(0.0, u_zoneRadius[i] - falloff * 0.35);
+    float outer = u_zoneRadius[i] + falloff;
+    float inside = 1.0 - smoothstep(inner, outer, dist);
+    zoneWeight = max(zoneWeight, inside * u_zoneIntensity[i]);
+  }
+
+  if (u_invertZones == 1) {
+    return clamp(1.0 - zoneWeight, 0.0, 1.0);
+  }
+  return clamp(zoneWeight, 0.0, 1.0);
+}
+
 void main() {
   vec2 texel = 1.0 / u_resolution;
-  float tiltFactor = 1.0;
-  if (u_tiltShift > 0.001) {
-    // Diagonal optical focal plane like Persona poster
-    float plane = abs((v_uv.x * 0.65 + v_uv.y * 0.75) - 0.72);
-    tiltFactor = mix(1.0, smoothstep(0.05, 0.55, plane) * 1.45 + 0.08, u_tiltShift);
-  }
+  float zoneFactor = computeZoneBlurFactor(v_uv);
+  float radius = u_blurPx * zoneFactor;
 
-  float radius = u_blurPx * tiltFactor;
+  vec4 col;
   if (radius < 0.35) {
-    vec4 base = texture(u_tex, v_uv);
-    outColor = base;
-    return;
+    col = texture(u_tex, v_uv);
+  } else {
+    vec4 sum = vec4(0.0);
+    float totalW = 0.0;
+    for (int i = -6; i <= 6; i++) {
+      float fi = float(i);
+      float norm = fi / 6.0;
+      float w = exp(-2.5 * norm * norm);
+      vec2 offset = u_dir * texel * (fi * radius * 0.45);
+      sum += texture(u_tex, clamp(v_uv + offset, 0.001, 0.999)) * w;
+      totalW += w;
+    }
+    col = sum / totalW;
   }
 
-  vec4 sum = vec4(0.0);
-  float totalW = 0.0;
-  // 13-tap smooth Gaussian distribution
-  for (int i = -6; i <= 6; i++) {
-    float fi = float(i);
-    float norm = fi / 6.0;
-    float w = exp(-2.5 * norm * norm);
-    vec2 offset = u_dir * texel * (fi * radius * 0.45);
-    sum += texture(u_tex, clamp(v_uv + offset, 0.001, 0.999)) * w;
-    totalW += w;
-  }
-  vec4 col = sum / totalW;
+  if (u_isSecondPass == 1) {
+    // Apply % of defocus effect cleanly against original sharp texture
+    vec4 sharp = texture(u_sharpTex, v_uv);
+    col = mix(sharp, col, clamp(u_defocusMix, 0.0, 1.0));
 
-  if (u_isSecondPass == 1 && u_meltThreshold > 0.01) {
-    float luma = dot(col.rgb, vec3(0.299, 0.587, 0.114));
-    float edge = mix(0.18, 0.03, u_meltThreshold);
-    float thresh = mix(0.55, 0.38, u_meltThreshold);
-    float melted = smoothstep(thresh - edge, thresh + edge, luma);
-    // Preserve hue while sharpening fused metaball silhouettes
-    vec3 darkCol = col.rgb * 0.08;
-    vec3 lightCol = max(col.rgb, vec3(melted));
-    col.rgb = mix(darkCol, lightCol, melted);
+    if (u_meltThreshold > 0.01) {
+      float luma = dot(col.rgb, vec3(0.299, 0.587, 0.114));
+      float edge = mix(0.18, 0.03, u_meltThreshold);
+      float thresh = mix(0.55, 0.38, u_meltThreshold);
+      float melted = smoothstep(thresh - edge, thresh + edge, luma);
+      vec3 darkCol = col.rgb * 0.08;
+      vec3 lightCol = max(col.rgb, vec3(melted));
+      col.rgb = mix(darkCol, lightCol, melted);
+    }
   }
 
   outColor = col;
@@ -527,17 +567,54 @@ export class ShaderPipeline {
     gl.bindVertexArray(this.quadVao);
     gl.viewport(0, 0, width, height);
 
-    // --- PASS 1: Blur + Ink-Melt ---
+    // --- PASS 1: Blur + Multi-Zone Optical Focus + Ink-Melt ---
     const blurPx = params.defocus.enabled
-      ? (params.defocus.blurAmount * 22 + params.defocus.inkMelt * 24) * exportScale
+      ? (params.defocus.blurAmount * 28 + params.defocus.inkMelt * 24) * exportScale
       : 0;
     const meltThresh = params.defocus.enabled ? params.defocus.meltThreshold : 0;
+    const defocusMix = params.defocus.enabled ? params.defocus.mix : 0;
+
+    const zones = params.defocus.zones.slice(0, 4);
+    const zCount = zones.length;
+    const zPos = new Float32Array(8);
+    const zRadius = new Float32Array(4);
+    const zSoftness = new Float32Array(4);
+    const zIntensity = new Float32Array(4);
+    const zType = new Int32Array(4);
+    const zAngle = new Float32Array(4);
+
+    for (let i = 0; i < zCount; i++) {
+      const z = zones[i];
+      zPos[i * 2] = z.x;
+      zPos[i * 2 + 1] = 1.0 - z.y;
+      zRadius[i] = z.radius;
+      zSoftness[i] = z.softness;
+      zIntensity[i] = z.intensity;
+      zType[i] = z.type === 'linear' ? 1 : 0;
+      zAngle[i] = z.angle;
+    }
 
     gl.useProgram(this.blurProg!);
     gl.uniform2f(gl.getUniformLocation(this.blurProg!, 'u_resolution'), width, height);
     gl.uniform1f(gl.getUniformLocation(this.blurProg!, 'u_blurPx'), blurPx);
-    gl.uniform1f(gl.getUniformLocation(this.blurProg!, 'u_tiltShift'), params.defocus.enabled ? params.defocus.tiltShift : 0);
+    gl.uniform1f(gl.getUniformLocation(this.blurProg!, 'u_defocusMix'), defocusMix);
     gl.uniform1f(gl.getUniformLocation(this.blurProg!, 'u_meltThreshold'), meltThresh);
+
+    gl.uniform1i(
+      gl.getUniformLocation(this.blurProg!, 'u_zoneMode'),
+      params.defocus.zoneMode === 'zones' ? 1 : 0
+    );
+    gl.uniform1i(
+      gl.getUniformLocation(this.blurProg!, 'u_invertZones'),
+      params.defocus.invertZones ? 1 : 0
+    );
+    gl.uniform1i(gl.getUniformLocation(this.blurProg!, 'u_zoneCount'), zCount);
+    gl.uniform2fv(gl.getUniformLocation(this.blurProg!, 'u_zonePos'), zPos);
+    gl.uniform1fv(gl.getUniformLocation(this.blurProg!, 'u_zoneRadius'), zRadius);
+    gl.uniform1fv(gl.getUniformLocation(this.blurProg!, 'u_zoneSoftness'), zSoftness);
+    gl.uniform1fv(gl.getUniformLocation(this.blurProg!, 'u_zoneIntensity'), zIntensity);
+    gl.uniform1iv(gl.getUniformLocation(this.blurProg!, 'u_zoneType'), zType);
+    gl.uniform1fv(gl.getUniformLocation(this.blurProg!, 'u_zoneAngle'), zAngle);
 
     // 1A: Horizontal
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboA.fbo);
@@ -548,12 +625,18 @@ export class ShaderPipeline {
     gl.uniform1i(gl.getUniformLocation(this.blurProg!, 'u_isSecondPass'), 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-    // 1B: Vertical
+    // 1B: Vertical + Mix with Sharp
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboB.fbo);
+    gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.fboA.tex);
+    gl.uniform1i(gl.getUniformLocation(this.blurProg!, 'u_tex'), 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.sourceTex);
+    gl.uniform1i(gl.getUniformLocation(this.blurProg!, 'u_sharpTex'), 1);
     gl.uniform2f(gl.getUniformLocation(this.blurProg!, 'u_dir'), 0, 1);
     gl.uniform1i(gl.getUniformLocation(this.blurProg!, 'u_isSecondPass'), 1);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.activeTexture(gl.TEXTURE0);
 
     // --- PASS 2: Liquid Warp + Glass Droplet Refraction ---
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fboC.fbo);

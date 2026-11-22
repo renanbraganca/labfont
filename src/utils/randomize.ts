@@ -33,7 +33,14 @@ export function randomizeSubtle(current: StudioParams): StudioParams {
 
   if (next.defocus.enabled) {
     next.defocus.blurAmount = JITTER(next.defocus.blurAmount, 0.18, 0.05, 0.85);
-    next.defocus.tiltShift = JITTER(next.defocus.tiltShift, 0.25, 0, 0.9);
+    next.defocus.mix = JITTER(next.defocus.mix, 0.18, 0.25, 1.0);
+    next.defocus.zones = next.defocus.zones.map((z) => ({
+      ...z,
+      x: JITTER(z.x, 0.14, 0.12, 0.88),
+      y: JITTER(z.y, 0.14, 0.12, 0.88),
+      radius: JITTER(z.radius, 0.1, 0.1, 0.65),
+      intensity: JITTER(z.intensity, 0.2, 0.25, 1.0),
+    }));
     if (next.defocus.inkMelt > 0) {
       next.defocus.inkMelt = JITTER(next.defocus.inkMelt, 0.16, 0.05, 0.85);
     }
@@ -105,8 +112,22 @@ export function randomizeAggressive(current: StudioParams): StudioParams {
 
   next.defocus = {
     enabled: flags[0],
-    blurAmount: Number(rand(0.12, 0.78).toFixed(2)),
-    tiltShift: Number(rand(0, 0.85).toFixed(2)),
+    mix: Number(rand(0.45, 1.0).toFixed(2)),
+    blurAmount: Number(rand(0.18, 0.82).toFixed(2)),
+    zoneMode: Math.random() > 0.35 ? 'zones' : 'full',
+    invertZones: Math.random() > 0.45,
+    zones: [
+      {
+        id: 'z-1',
+        type: Math.random() > 0.4 ? 'radial' : 'linear',
+        x: Number(rand(0.22, 0.78).toFixed(2)),
+        y: Number(rand(0.22, 0.78).toFixed(2)),
+        radius: Number(rand(0.15, 0.48).toFixed(2)),
+        softness: Number(rand(0.25, 0.85).toFixed(2)),
+        intensity: Number(rand(0.55, 1.0).toFixed(2)),
+        angle: Math.round(rand(0, 180)),
+      },
+    ],
     inkMelt: Math.random() > 0.4 ? Number(rand(0.15, 0.72).toFixed(2)) : 0,
     meltThreshold: Math.random() > 0.55 ? Number(rand(0.3, 0.65).toFixed(2)) : 0,
   };

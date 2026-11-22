@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Dices, Move, Pause, Play, RotateCcw, Type, Undo2, Zap } from 'lucide-react';
+import { Dices, Focus, Move, Pause, Play, RotateCcw, Type, Undo2, Zap } from 'lucide-react';
 import { ShaderPipeline } from '../engine/ShaderPipeline';
 import {
   CharacterPlacement,
@@ -27,7 +27,7 @@ interface CanvasViewportProps {
 
 const ASPECT_OPTIONS: AspectRatioKey[] = ['3:4', '4:5', '1:1', '16:9', '9:16'];
 
-type DragToolMode = 'char' | 'text';
+type DragToolMode = 'char' | 'text' | 'blurZone';
 
 export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   params,
@@ -53,6 +53,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const [isResizingChar, setIsResizingChar] = useState(false);
   const [hoveredCharIndex, setHoveredCharIndex] = useState<number | null>(null);
   const [selectedCharIndex, setSelectedCharIndex] = useState<number | null>(null);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
 
   const dragStartRef = useRef<{
     clientX: number;
@@ -60,6 +61,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     startOffsetX: number;
     startOffsetY: number;
     charIdx: number | null;
+    zoneId: string | null;
   } | null>(null);
 
   const resizeStartRef = useRef<{
@@ -225,7 +227,63 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     });
   };
 
+  const findHitZone = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas || params.defocus.zones.length === 0) return null;
+    const rect = canvas.getBoundingClientRect();
+    const nx = (clientX - rect.left) / Math.max(1, rect.width);
+    const ny = (clientY - rect.top) / Math.max(1, rect.height);
+    let best = params.defocus.zones[0];
+    let bestD = Infinity;
+    for (const z of params.defocus.zones) {
+      const d = Math.hypot(nx - z.x, ny - z.y);
+      if (d < bestD) {
+        bestD = d;
+        best = z;
+      }
+    }
+    return best;
+  };
+
+  const updateZonePosition = (clientX: number, clientY: number, zoneId: string) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const nx = Math.min(0.98, Math.max(0.02, (clientX - rect.left) / Math.max(1, rect.width)));
+    const ny = Math.min(0.98, Math.max(0.02, (clientY - rect.top) / Math.max(1, rect.height)));
+    onChange((p) => ({
+      ...p,
+      defocus: {
+        ...p.defocus,
+        zones: p.defocus.zones.map((z) =>
+          z.id === zoneId
+            ? { ...z, x: Number(nx.toFixed(3)), y: Number(ny.toFixed(3)) }
+            : z
+        ),
+      },
+    }));
+  };
+
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activeTool === 'blurZone') {
+      const hitZone = findHitZone(e.clientX, e.clientY);
+      if (hitZone) {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setIsDragging(true);
+        setSelectedZoneId(hitZone.id);
+        dragStartRef.current = {
+          clientX: e.clientX,
+          clientY: e.clientY,
+          startOffsetX: hitZone.x,
+          startOffsetY: hitZone.y,
+          charIdx: null,
+          zoneId: hitZone.id,
+        };
+        updateZonePosition(e.clientX, e.clientY, hitZone.id);
+      }
+      return;
+    }
+
     if (activeTool === 'char') {
       const hit = findHitCharacter(e.clientX, e.clientY);
       if (hit) {
@@ -239,6 +297,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           startOffsetX: existing.dx,
           startOffsetY: existing.dy,
           charIdx: hit.index,
+          zoneId: null,
         };
       } else {
         setSelectedCharIndex(null);
@@ -254,6 +313,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       startOffsetX: params.typography.offsetX,
       startOffsetY: params.typography.offsetY,
       charIdx: null,
+      zoneId: null,
     };
   };
 
@@ -268,7 +328,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       return;
     }
 
-    if (activeTool === 'char') {
+    if (activeTool === 'blurZone' && dragStartRef.current?.zoneId) {
+      updateZonePosition(e.clientX, e.clientY, dragStartRef.current.zoneId);
+    } else if (activeTool === 'char') {
       updateSingleCharPosition(e.clientX, e.clientY);
     } else {
       updateTextPosition(e.clientX, e.clientY);
@@ -292,6 +354,30 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    if (activeTool === 'blurZone') {
+      const hitZone = findHitZone(e.clientX, e.clientY);
+      const zId = hitZone?.id ?? selectedZoneId ?? params.defocus.zones[0]?.id;
+      if (!zId) return;
+      e.preventDefault();
+      setSelectedZoneId(zId);
+      const delta = e.deltaY < 0 ? 0.025 : -0.025;
+      onChange((p) => ({
+        ...p,
+        defocus: {
+          ...p.defocus,
+          zones: p.defocus.zones.map((z) =>
+            z.id === zId
+              ? {
+                  ...z,
+                  radius: Number(Math.min(0.85, Math.max(0.05, z.radius + delta)).toFixed(2)),
+                }
+              : z
+          ),
+        },
+      }));
+      return;
+    }
+
     if (activeTool !== 'char') return;
     const hit = findHitCharacter(e.clientX, e.clientY);
     const targetIdx = hit?.index ?? selectedCharIndex;
@@ -467,6 +553,32 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
               <Move className="w-3 h-3" />
               <span>Mover Texto</span>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDragTool('blurZone');
+                setSelectedCharIndex(null);
+                if (!params.defocus.enabled || params.defocus.zoneMode !== 'zones') {
+                  onChange((p) => ({
+                    ...p,
+                    defocus: {
+                      ...p.defocus,
+                      enabled: true,
+                      zoneMode: 'zones',
+                    },
+                  }));
+                }
+              }}
+              title="Posicionar e redimensionar zonas de desfoque no canvas"
+              className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer whitespace-nowrap ${
+                activeTool === 'blurZone'
+                  ? 'bg-zinc-800 text-white'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Focus className="w-3 h-3" />
+              <span>Zonas Desfoque</span>
+            </button>
           </div>
 
           {hasCustomCharOffsets && (
@@ -607,6 +719,48 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
             </div>
           )}
 
+          {/* Non-exported Visual Blur Zone Guides */}
+          {activeTool === 'blurZone' &&
+            params.defocus.enabled &&
+            params.defocus.zoneMode === 'zones' &&
+            params.defocus.zones.map((z, idx) => {
+              const aspect = dims.width / dims.height;
+              const diameterPctW = (z.radius * 2 * 100) / aspect;
+              const diameterPctH = z.radius * 2 * 100;
+              const isSelected = selectedZoneId === z.id;
+              return (
+                <div
+                  key={z.id}
+                  className="pointer-events-none absolute"
+                  style={{
+                    left: `${z.x * 100}%`,
+                    top: `${z.y * 100}%`,
+                    width: z.type === 'radial' ? `${diameterPctW}%` : '140%',
+                    height: z.type === 'radial' ? `${diameterPctH}%` : `${diameterPctH}%`,
+                    transform:
+                      z.type === 'linear'
+                        ? `translate(-50%, -50%) rotate(${-z.angle}deg)`
+                        : 'translate(-50%, -50%)',
+                  }}
+                >
+                  <div
+                    className={`w-full h-full border border-dashed ${
+                      z.type === 'radial' ? 'rounded-full' : 'border-y border-x-0'
+                    } ${
+                      isSelected
+                        ? 'border-blue-400 bg-blue-500/5'
+                        : 'border-white/45 bg-white/[0.02]'
+                    }`}
+                  />
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-950/85 border border-blue-400/70 text-[10px] font-mono-tabular text-zinc-100 whitespace-nowrap">
+                    <span>
+                      Z{idx + 1} · {Math.round(z.intensity * 100)}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
           {contextLost && (
             <div className="absolute inset-0 bg-zinc-950/90 flex items-center justify-center p-6 text-center">
               <p className="text-xs text-zinc-300">
@@ -677,7 +831,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         <span className="hidden md:inline text-zinc-500">
           {activeTool === 'char'
             ? 'Arraste uma letra para mover · Puxe a alça do canto ou use o scroll para redimensionar'
-            : 'Arraste no canvas para mover o texto · Duplo clique centraliza'}
+            : activeTool === 'blurZone'
+              ? 'Arraste para posicionar as zonas de desfoque · Scroll altera o tamanho'
+              : 'Arraste no canvas para mover o texto · Duplo clique centraliza'}
         </span>
       </div>
     </main>

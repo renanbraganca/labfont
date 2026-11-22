@@ -62,10 +62,24 @@ export interface BackgroundState {
   gradientAngle: number;
 }
 
+export interface BlurZone {
+  id: string;
+  type: 'radial' | 'linear';
+  x: number; // 0..1 normalized
+  y: number; // 0..1 normalized
+  radius: number; // 0.05..0.85
+  softness: number; // 0.05..1.0
+  intensity: number; // 0..1 (% of blur effect in this zone)
+  angle: number; // 0..360 deg (used when type === 'linear')
+}
+
 export interface OpticalDefocusParams {
   enabled: boolean;
+  mix: number; // 0..1 (% of defocus effect applied overall)
   blurAmount: number; // 0 to 1
-  tiltShift: number; // 0 to 1 (selective diagonal/radial focus like Persona)
+  zoneMode: 'full' | 'zones';
+  invertZones: boolean; // false = blur inside zones, true = sharp inside zones (blur outside)
+  zones: BlurZone[];
   inkMelt: number; // 0 to 1 (pre-threshold organic metaball fusion)
   meltThreshold: number; // 0 to 1 (0 = off, >0 sharpens fused shapes)
 }
