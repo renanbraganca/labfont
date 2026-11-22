@@ -48,7 +48,7 @@ export const PRESETS: PresetDefinition[] = [
         color: '#193146',
         opacity: 0.96,
         uppercase: true,
-        showEditorialFooter: true,
+        showEditorialFooter: false,
         footerLeft: 'Ingmar Bergman',
         footerCenter: 'Bibi Andersson & Liv Ullmann',
         footerRight: '1966 / 2026',
