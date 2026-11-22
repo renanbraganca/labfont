@@ -70,21 +70,6 @@ export interface OpticalDefocusParams {
   meltThreshold: number; // 0 to 1 (0 = off, >0 sharpens fused shapes)
 }
 
-export interface LiquidGlassDropletParams {
-  enabled: boolean;
-  x: number; // 0..1 normalized canvas space
-  y: number; // 0..1 normalized canvas space
-  radius: number; // 0.05..0.55
-  blobiness: number; // 0..1 organic deformation
-  refraction: number; // 0..1 barrel/lens strength
-  dispersion: number; // 0..1 RGB chromatic fringe
-  specular: number; // 0..1 rim + highlight gloss
-  translucency: number; // 0..1 optical glass transmission & ghosting
-  frost: number; // 0..1 internal frosted glass blur
-  animateOrbit: boolean;
-  count: number; // 1..3
-}
-
 export interface LiquidWarpParams {
   enabled: boolean;
   amplitude: number; // 0..1
@@ -133,7 +118,6 @@ export interface StudioParams {
   typography: TypographyState;
   media: MediaSourceState;
   defocus: OpticalDefocusParams;
-  droplet: LiquidGlassDropletParams;
   warp: LiquidWarpParams;
   streaks: DirectionalStreakParams;
   halftone: HalftoneParams;

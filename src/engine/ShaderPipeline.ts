@@ -68,7 +68,7 @@ void main() {
 }
 `;
 
-// Pass 2: Liquid Wave Warp + Liquid Glass Droplet Refraction + Chromatic Dispersion
+// Pass 2: Liquid Wave Warp + Chromatic Split
 const OPTICS_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_uv;
@@ -87,19 +87,6 @@ uniform float u_warpChroma;
 uniform float u_warpGloss;
 uniform float u_warpPinch;
 
-// Glass Droplet
-uniform int u_dropletEnabled;
-uniform vec2 u_dropletPos;
-uniform float u_dropletRadius;
-uniform float u_dropletBlob;
-uniform float u_dropletRefract;
-uniform float u_dropletDispersion;
-uniform float u_dropletSpecular;
-uniform float u_dropletTranslucency;
-uniform float u_dropletFrost;
-uniform int u_dropletOrbit;
-uniform int u_dropletCount;
-
 vec2 computeWarpOffset(vec2 uv, float t) {
   vec2 p = (uv - 0.5) * u_warpFreq;
   float w1 = sin(p.x * 2.1 + t * 1.3 + cos(p.y * 1.7 - t * 0.9));
@@ -113,47 +100,8 @@ vec2 computeWarpOffset(vec2 uv, float t) {
   return disp;
 }
 
-float smin(float a, float b, float k) {
-  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
-  return mix(b, a, h) - k * h * (1.0 - h);
-}
-
-float dropletSDF(vec2 p, vec2 center, float radius, float blob, float phase) {
-  vec2 d = p - center;
-  float angle = atan(d.y, d.x);
-  float wobble = 1.0
-    + blob * 0.18 * sin(angle * 3.0 + phase * 1.1)
-    + blob * 0.11 * cos(angle * 5.0 - phase * 0.85)
-    + blob * 0.06 * sin(angle * 2.0 - phase * 0.5);
-  return length(d) - radius * wobble;
-}
-
-float sceneDropletSDF(vec2 p, float aspect, float t) {
-  vec2 c1 = u_dropletPos;
-  if (u_dropletOrbit == 1) {
-    c1 += vec2(sin(t * 0.65) * 0.035, cos(t * 0.52) * 0.028);
-  }
-  vec2 pc1 = vec2(c1.x * aspect, c1.y);
-  float d = dropletSDF(p, pc1, u_dropletRadius, u_dropletBlob, t);
-
-  if (u_dropletCount >= 2) {
-    vec2 c2 = u_dropletPos + vec2(0.18 * cos(t * 0.45 + 1.2), 0.16 * sin(t * 0.55 + 0.5));
-    vec2 pc2 = vec2(c2.x * aspect, c2.y);
-    float d2 = dropletSDF(p, pc2, u_dropletRadius * 0.62, u_dropletBlob, t + 2.1);
-    d = smin(d, d2, 0.09);
-  }
-  if (u_dropletCount >= 3) {
-    vec2 c3 = u_dropletPos + vec2(-0.19 * sin(t * 0.4 + 2.0), 0.15 * cos(t * 0.6 + 1.8));
-    vec2 pc3 = vec2(c3.x * aspect, c3.y);
-    float d3 = dropletSDF(p, pc3, u_dropletRadius * 0.48, u_dropletBlob, t + 4.3);
-    d = smin(d, d3, 0.08);
-  }
-  return d;
-}
-
 void main() {
   vec2 uv = v_uv;
-  float aspect = u_resolution.x / max(1.0, u_resolution.y);
   float t = u_time;
 
   vec3 col = vec3(0.0);
@@ -182,90 +130,6 @@ void main() {
     uv = uv + disp;
   } else {
     col = texture(u_tex, uv).rgb;
-  }
-
-  // 2. Liquid Glass Droplet Lens
-  if (u_dropletEnabled == 1) {
-    vec2 p = vec2(v_uv.x * aspect, v_uv.y);
-    float d = sceneDropletSDF(p, aspect, t);
-    float aa = 2.0 / max(1.0, u_resolution.y);
-    float mask = 1.0 - smoothstep(-aa, aa, d);
-
-    if (mask > 0.001) {
-      float e = 0.003;
-      float dx = sceneDropletSDF(p + vec2(e, 0.0), aspect, t) - sceneDropletSDF(p - vec2(e, 0.0), aspect, t);
-      float dy = sceneDropletSDF(p + vec2(0.0, e), aspect, t) - sceneDropletSDF(p - vec2(0.0, e), aspect, t);
-      vec2 grad = normalize(vec2(dx, dy) + 1e-5);
-
-      // Dome thickness inside SDF
-      float depth = clamp(-d / max(0.02, u_dropletRadius), 0.0, 1.0);
-      float edgeCurve = pow(1.0 - depth, 0.72);
-      vec3 normal = normalize(vec3(grad * edgeCurve * 1.35, sqrt(max(0.02, 1.0 - edgeCurve * edgeCurve * 0.85))));
-
-      // Barrel + edge refraction
-      vec2 refractOffset = -normal.xy * (0.08 + u_dropletRefract * 0.24) * (0.45 + edgeCurve * 0.9);
-      vec2 baseSampleUV = v_uv;
-      if (u_warpEnabled == 1) {
-        baseSampleUV = v_uv + computeWarpOffset(v_uv, t * u_warpSpeed);
-      }
-
-      // Strong chromatic dispersion along curved glass boundary
-      float dispStrength = u_dropletDispersion * (0.014 + edgeCurve * 0.042);
-      vec2 dispDir = normal.xy;
-      vec2 uvR = clamp(baseSampleUV + refractOffset + dispDir * dispStrength * 1.15, 0.001, 0.999);
-      vec2 uvG = clamp(baseSampleUV + refractOffset, 0.001, 0.999);
-      vec2 uvB = clamp(baseSampleUV + refractOffset - dispDir * dispStrength * 1.15, 0.001, 0.999);
-
-      vec3 glassCol = vec3(0.0);
-      if (u_dropletFrost > 0.005) {
-        // 8-tap frosted glass internal scatter for translucent crystal texture
-        float frostRad = u_dropletFrost * 0.018 * (0.6 + 0.4 * depth);
-        for (int k = 0; k < 8; k++) {
-          float ang = float(k) * 0.78539816339;
-          vec2 jitter = vec2(cos(ang) / aspect, sin(ang)) * frostRad;
-          glassCol.r += texture(u_tex, clamp(uvR + jitter, 0.001, 0.999)).r;
-          glassCol.g += texture(u_tex, clamp(uvG + jitter, 0.001, 0.999)).g;
-          glassCol.b += texture(u_tex, clamp(uvB + jitter, 0.001, 0.999)).b;
-        }
-        glassCol /= 8.0;
-        // Subtle milky crystal light scatter on frosted glass
-        glassCol = mix(glassCol, glassCol * 0.94 + vec3(0.07), u_dropletFrost * 0.35);
-      } else {
-        glassCol = vec3(
-          texture(u_tex, uvR).r,
-          texture(u_tex, uvG).g,
-          texture(u_tex, uvB).b
-        );
-      }
-
-      // Fresnel rim & studio softbox specular (screen-blended so glass stays translucent)
-      float fresnel = pow(1.0 - max(normal.z, 0.0), 2.8);
-      vec3 light1 = normalize(vec3(-0.55, 0.72, 0.58));
-      vec3 light2 = normalize(vec3(0.6, -0.45, 0.65));
-      float spec1 = pow(max(dot(reflect(vec3(0.0, 0.0, -1.0), normal), light1), 0.0), 30.0);
-      float spec2 = pow(max(dot(reflect(vec3(0.0, 0.0, -1.0), normal), light2), 0.0), 16.0);
-
-      // Delicate prismatic rim dispersion tint
-      vec3 rimTint = vec3(
-        0.55 + 0.45 * sin(atan(grad.y, grad.x) * 2.0 + 0.0),
-        0.55 + 0.45 * sin(atan(grad.y, grad.x) * 2.0 + 2.1),
-        0.55 + 0.45 * sin(atan(grad.y, grad.x) * 2.0 + 4.2)
-      );
-
-      // Blend refracted body with underlying unrefracted layer according to translucency
-      vec3 transmitted = mix(col, glassCol, u_dropletTranslucency);
-
-      // Screen-blend specular highlights and Fresnel glass edge so dark backgrounds stay transparent
-      vec3 edgeLight = mix(vec3(0.85, 0.92, 1.0), rimTint, u_dropletDispersion * 0.65) * (fresnel * 0.42 * u_dropletSpecular);
-      vec3 specLight = vec3(1.0) * ((spec1 * 0.75 + spec2 * 0.22) * u_dropletSpecular);
-      vec3 glassResult = 1.0 - (1.0 - transmitted) * (1.0 - clamp(edgeLight + specLight, 0.0, 0.95));
-
-      // Delicate refractive glass outline
-      float outerEdge = smoothstep(0.009, 0.0, abs(d)) * 0.28 * u_dropletSpecular;
-      glassResult = mix(glassResult, glassResult + rimTint * 0.16, outerEdge);
-
-      col = mix(col, glassResult, mask);
-    }
   }
 
   // Screen-blend warp gloss so dark scenes remain rich & translucent
@@ -706,18 +570,6 @@ export class ShaderPipeline {
     gl.uniform1f(gl.getUniformLocation(this.opticsProg!, 'u_warpChroma'), params.warp.chromaticSplit);
     gl.uniform1f(gl.getUniformLocation(this.opticsProg!, 'u_warpGloss'), params.warp.glossHighlight);
     gl.uniform1f(gl.getUniformLocation(this.opticsProg!, 'u_warpPinch'), params.warp.pinch);
-
-    gl.uniform1i(gl.getUniformLocation(this.opticsProg!, 'u_dropletEnabled'), params.droplet.enabled ? 1 : 0);
-    gl.uniform2f(gl.getUniformLocation(this.opticsProg!, 'u_dropletPos'), params.droplet.x, 1.0 - params.droplet.y);
-    gl.uniform1f(gl.getUniformLocation(this.opticsProg!, 'u_dropletRadius'), params.droplet.radius);
-    gl.uniform1f(gl.getUniformLocation(this.opticsProg!, 'u_dropletBlob'), params.droplet.blobiness);
-    gl.uniform1f(gl.getUniformLocation(this.opticsProg!, 'u_dropletRefract'), params.droplet.refraction);
-    gl.uniform1f(gl.getUniformLocation(this.opticsProg!, 'u_dropletDispersion'), params.droplet.dispersion);
-    gl.uniform1f(gl.getUniformLocation(this.opticsProg!, 'u_dropletSpecular'), params.droplet.specular);
-    gl.uniform1f(gl.getUniformLocation(this.opticsProg!, 'u_dropletTranslucency'), params.droplet.translucency);
-    gl.uniform1f(gl.getUniformLocation(this.opticsProg!, 'u_dropletFrost'), params.droplet.frost);
-    gl.uniform1i(gl.getUniformLocation(this.opticsProg!, 'u_dropletOrbit'), params.droplet.animateOrbit ? 1 : 0);
-    gl.uniform1i(gl.getUniformLocation(this.opticsProg!, 'u_dropletCount'), params.droplet.count);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     // --- PASS 3: Directional Streaks ---

@@ -39,17 +39,6 @@ export function randomizeSubtle(current: StudioParams): StudioParams {
     }
   }
 
-  if (next.droplet.enabled) {
-    next.droplet.x = JITTER(next.droplet.x, 0.14, 0.22, 0.78);
-    next.droplet.y = JITTER(next.droplet.y, 0.14, 0.22, 0.78);
-    next.droplet.radius = JITTER(next.droplet.radius, 0.06, 0.12, 0.42);
-    next.droplet.blobiness = JITTER(next.droplet.blobiness, 0.2, 0.1, 0.9);
-    next.droplet.refraction = JITTER(next.droplet.refraction, 0.18, 0.25, 0.95);
-    next.droplet.dispersion = JITTER(next.droplet.dispersion, 0.22, 0.15, 1.0);
-    next.droplet.translucency = JITTER(next.droplet.translucency, 0.16, 0.35, 0.96);
-    next.droplet.frost = JITTER(next.droplet.frost, 0.12, 0.0, 0.65);
-  }
-
   if (next.warp.enabled) {
     next.warp.amplitude = JITTER(next.warp.amplitude, 0.15, 0.05, 0.8);
     next.warp.frequency = JITTER(next.warp.frequency, 0.8, 0.8, 5.5);
@@ -103,15 +92,12 @@ export function randomizeAggressive(current: StudioParams): StudioParams {
   next.typography.repeatCount = Math.floor(rand(3, 8));
   next.typography.charOffsets = {};
 
-  // Turn on 2 to 4 dramatic effects simultaneously
   const flags = [
     Math.random() > 0.35, // defocus
-    Math.random() > 0.3,  // droplet
-    Math.random() > 0.3,  // warp
-    Math.random() > 0.35, // streaks
-    Math.random() > 0.5,  // halftone
+    Math.random() > 0.25, // warp
+    Math.random() > 0.3,  // streaks
+    Math.random() > 0.45, // halftone
   ];
-  // Guarantee at least 2 active shaders
   if (flags.filter(Boolean).length < 2) {
     flags[1] = true;
     flags[2] = true;
@@ -125,23 +111,8 @@ export function randomizeAggressive(current: StudioParams): StudioParams {
     meltThreshold: Math.random() > 0.55 ? Number(rand(0.3, 0.65).toFixed(2)) : 0,
   };
 
-  next.droplet = {
-    enabled: flags[1],
-    x: Number(rand(0.28, 0.72).toFixed(2)),
-    y: Number(rand(0.28, 0.72).toFixed(2)),
-    radius: Number(rand(0.18, 0.38).toFixed(2)),
-    blobiness: Number(rand(0.25, 0.95).toFixed(2)),
-    refraction: Number(rand(0.45, 0.98).toFixed(2)),
-    dispersion: Number(rand(0.45, 1.0).toFixed(2)),
-    specular: Number(rand(0.5, 1.0).toFixed(2)),
-    translucency: Number(rand(0.45, 0.92).toFixed(2)),
-    frost: Number(rand(0.0, 0.45).toFixed(2)),
-    animateOrbit: true,
-    count: Math.floor(rand(1, 3.99)),
-  };
-
   next.warp = {
-    enabled: flags[2],
+    enabled: flags[1],
     amplitude: Number(rand(0.22, 0.82).toFixed(2)),
     frequency: Number(rand(1.4, 5.2).toFixed(2)),
     speed: Number(rand(0.4, 1.3).toFixed(2)),
@@ -151,7 +122,7 @@ export function randomizeAggressive(current: StudioParams): StudioParams {
   };
 
   next.streaks = {
-    enabled: flags[3],
+    enabled: flags[2],
     intensity: Number(rand(0.45, 1.35).toFixed(2)),
     length: Number(rand(0.4, 0.95).toFixed(2)),
     angle: pick([0, 45, 90, 135, 180, Math.round(rand(0, 360))]),
@@ -161,7 +132,7 @@ export function randomizeAggressive(current: StudioParams): StudioParams {
 
   const shapes: HalftoneShape[] = ['circle', 'diamond', 'line'];
   next.halftone = {
-    enabled: flags[4],
+    enabled: flags[3],
     mix: Number(rand(0.65, 1.0).toFixed(2)),
     dotSize: Math.round(rand(6, 18)),
     angle: Math.round(rand(0, 90)),

@@ -7,11 +7,10 @@ interface RightPanelProps {
   onChange: (updater: (prev: StudioParams) => StudioParams) => void;
 }
 
-type ModuleKey = 'droplet' | 'warp' | 'streaks' | 'defocus' | 'halftone' | 'grade';
+type ModuleKey = 'warp' | 'streaks' | 'defocus' | 'halftone' | 'grade';
 
 export const RightPanel: React.FC<RightPanelProps> = ({ params, onChange }) => {
   const [expanded, setExpanded] = useState<Record<ModuleKey, boolean>>({
-    droplet: true,
     warp: true,
     streaks: true,
     defocus: false,
@@ -31,123 +30,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ params, onChange }) => {
       </div>
 
       <div className="flex-1 overflow-y-auto divide-y divide-zinc-800/80">
-        {/* 1. LIQUID GLASS DROPLET */}
-        <div>
-          <ModuleToggleHeader
-            title="Vidro Líquido & Dispersão"
-            subtitle="Lente refrativa prismática"
-            enabled={params.droplet.enabled}
-            expanded={expanded.droplet}
-            onExpandToggle={() => toggleExpand('droplet')}
-            onToggle={(next) => {
-              onChange((p) => ({ ...p, droplet: { ...p.droplet, enabled: next } }));
-              if (next) setExpanded((e) => ({ ...e, droplet: true }));
-            }}
-          />
-          {expanded.droplet && (
-            <div className="px-4 pb-4 space-y-3">
-              <SliderControl
-                label="Raio da Lente"
-                value={params.droplet.radius}
-                min={0.06}
-                max={0.52}
-                step={0.01}
-                onChange={(v) =>
-                  onChange((p) => ({ ...p, droplet: { ...p.droplet, radius: v } }))
-                }
-              />
-              <SliderControl
-                label="Organicidade (Blob)"
-                value={params.droplet.blobiness}
-                min={0}
-                max={1.1}
-                step={0.01}
-                onChange={(v) =>
-                  onChange((p) => ({ ...p, droplet: { ...p.droplet, blobiness: v } }))
-                }
-              />
-              <SliderControl
-                label="Refração Óptica"
-                value={params.droplet.refraction}
-                min={0}
-                max={1.2}
-                step={0.01}
-                onChange={(v) =>
-                  onChange((p) => ({ ...p, droplet: { ...p.droplet, refraction: v } }))
-                }
-              />
-              <SliderControl
-                label="Dispersão Cromática RGB"
-                value={params.droplet.dispersion}
-                min={0}
-                max={1.4}
-                step={0.01}
-                onChange={(v) =>
-                  onChange((p) => ({ ...p, droplet: { ...p.droplet, dispersion: v } }))
-                }
-              />
-              <SliderControl
-                label="Brilho Especular & Fresnel"
-                value={params.droplet.specular}
-                min={0}
-                max={1.3}
-                step={0.01}
-                onChange={(v) =>
-                  onChange((p) => ({ ...p, droplet: { ...p.droplet, specular: v } }))
-                }
-              />
-              <SliderControl
-                label="Translucidez (Transmissão)"
-                value={params.droplet.translucency}
-                min={0.1}
-                max={1.0}
-                step={0.01}
-                onChange={(v) =>
-                  onChange((p) => ({ ...p, droplet: { ...p.droplet, translucency: v } }))
-                }
-              />
-              <SliderControl
-                label="Vidro Fosco (Frost)"
-                value={params.droplet.frost}
-                min={0}
-                max={1.0}
-                step={0.01}
-                onChange={(v) =>
-                  onChange((p) => ({ ...p, droplet: { ...p.droplet, frost: v } }))
-                }
-              />
-              <SliderControl
-                label="Quantidade de Gotas"
-                value={params.droplet.count}
-                min={1}
-                max={3}
-                step={1}
-                onChange={(v) =>
-                  onChange((p) => ({ ...p, droplet: { ...p.droplet, count: Math.round(v) } }))
-                }
-              />
-              <label className="flex items-center justify-between text-xs text-zinc-300 cursor-pointer pt-0.5">
-                <span>Órbita Orgânica Contínua</span>
-                <input
-                  type="checkbox"
-                  checked={params.droplet.animateOrbit}
-                  onChange={(e) =>
-                    onChange((p) => ({
-                      ...p,
-                      droplet: { ...p.droplet, animateOrbit: e.target.checked },
-                    }))
-                  }
-                  className="rounded border-zinc-700 bg-zinc-900 text-blue-500"
-                />
-              </label>
-              <p className="text-[11px] text-zinc-500">
-                Arraste diretamente sobre o canvas para posicionar a lente.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* 2. LIQUID WAVE WARP */}
+        {/* 1. LIQUID WAVE WARP */}
         <div>
           <ModuleToggleHeader
             title="Distorção Líquida & Onda"

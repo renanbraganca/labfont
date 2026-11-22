@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Dices, Droplet, Move, Pause, Play, RotateCcw, Type, Undo2, Zap } from 'lucide-react';
+import { Dices, Move, Pause, Play, RotateCcw, Type, Undo2, Zap } from 'lucide-react';
 import { ShaderPipeline } from '../engine/ShaderPipeline';
 import {
   CharacterPlacement,
@@ -27,7 +27,7 @@ interface CanvasViewportProps {
 
 const ASPECT_OPTIONS: AspectRatioKey[] = ['3:4', '4:5', '1:1', '16:9', '9:16'];
 
-type DragToolMode = 'char' | 'text' | 'droplet';
+type DragToolMode = 'char' | 'text';
 
 export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   params,
@@ -114,8 +114,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
   const dims = getAspectDimensions(params.aspectRatio, 1080);
 
-  const activeTool: DragToolMode =
-    dragTool === 'droplet' && !params.droplet.enabled ? 'char' : dragTool;
+  const activeTool: DragToolMode = dragTool;
 
   const getCurrentPlacements = (): CharacterPlacement[] => {
     const ctx = measureCtxRef.current;
@@ -179,22 +178,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     });
   };
 
-  const updateDropletPosition = (clientX: number, clientY: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const nx = Math.min(0.95, Math.max(0.05, (clientX - rect.left) / rect.width));
-    const ny = Math.min(0.95, Math.max(0.05, (clientY - rect.top) / rect.height));
-    onChange((p) => ({
-      ...p,
-      droplet: {
-        ...p.droplet,
-        x: Number(nx.toFixed(3)),
-        y: Number(ny.toFixed(3)),
-      },
-    }));
-  };
-
   const updateTextPosition = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     const start = dragStartRef.current;
@@ -243,13 +226,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (activeTool === 'droplet') {
-      e.currentTarget.setPointerCapture(e.pointerId);
-      setIsDragging(true);
-      updateDropletPosition(e.clientX, e.clientY);
-      return;
-    }
-
     if (activeTool === 'char') {
       const hit = findHitCharacter(e.clientX, e.clientY);
       if (hit) {
@@ -292,9 +268,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       return;
     }
 
-    if (activeTool === 'droplet') {
-      updateDropletPosition(e.clientX, e.clientY);
-    } else if (activeTool === 'char') {
+    if (activeTool === 'char') {
       updateSingleCharPosition(e.clientX, e.clientY);
     } else {
       updateTextPosition(e.clientX, e.clientY);
@@ -492,27 +466,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
             >
               <Move className="w-3 h-3" />
               <span>Mover Texto</span>
-            </button>
-            <button
-              type="button"
-              disabled={!params.droplet.enabled}
-              onClick={() => {
-                setDragTool('droplet');
-                setSelectedCharIndex(null);
-              }}
-              title={
-                params.droplet.enabled
-                  ? 'Arrastar lente de vidro no canvas'
-                  : 'Ative Vidro Líquido para mover a lente'
-              }
-              className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer whitespace-nowrap disabled:opacity-35 disabled:pointer-events-none ${
-                activeTool === 'droplet'
-                  ? 'bg-zinc-800 text-white'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              <Droplet className="w-3 h-3" />
-              <span>Lente</span>
             </button>
           </div>
 
@@ -724,9 +677,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         <span className="hidden md:inline text-zinc-500">
           {activeTool === 'char'
             ? 'Arraste uma letra para mover · Puxe a alça do canto ou use o scroll para redimensionar'
-            : activeTool === 'droplet'
-              ? 'Arraste no canvas para mover a lente de vidro'
-              : 'Arraste no canvas para mover o texto · Duplo clique centraliza'}
+            : 'Arraste no canvas para mover o texto · Duplo clique centraliza'}
         </span>
       </div>
     </main>
